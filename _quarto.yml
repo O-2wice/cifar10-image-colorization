@@ -9,7 +9,15 @@ website:
   navbar:
     left:
       - href: index.qmd
-        text: Project
+        text: Report
+      - text: Notebook
+        href: https://github.com/O-2wice/cifar10-image-colorization/blob/main/notebooks/original-image-colorization.ipynb
+      - text: Open in Colab
+        href: https://colab.research.google.com/github/O-2wice/cifar10-image-colorization/blob/main/notebooks/original-image-colorization.ipynb
+    right:
+      - icon: github
+        href: https://github.com/O-2wice/cifar10-image-colorization
+        aria-label: GitHub repository
 
 format:
   html:

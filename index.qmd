@@ -14,10 +14,15 @@ data. One is convolutional; the other flattens the image and maps pixels
 directly. The comparison is the point, because the second model has roughly 20
 times more parameters and still loses.
 
-The notebook, `notebooks/original-image-colorization.ipynb`, is the runnable
-artifact: it trains on a Colab GPU and writes the figures and metrics this page
-reads. That split keeps the page renderable on any machine, with no GPU, no
-dataset download and no checkpoints.
+[The notebook](https://github.com/O-2wice/cifar10-image-colorization/blob/main/notebooks/original-image-colorization.ipynb)
+is the runnable artifact: it trains on a Colab GPU and writes the figures and
+metrics this page reads. That split keeps the page renderable on any machine,
+with no GPU, no dataset download and no checkpoints. All the code on this page
+comes from it, and every figure was produced by running it.
+
+[![Open the notebook in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/O-2wice/cifar10-image-colorization/blob/main/notebooks/original-image-colorization.ipynb)
+&nbsp;
+[Browse the repository](https://github.com/O-2wice/cifar10-image-colorization)
 
 ```{python}
 #| label: load-artifacts
@@ -68,6 +73,8 @@ class GrayscaleToColorDataset(Dataset):
         image, _ = self.dataset[idx]
         return self.gray_transform(image), self.color_transform(image)
 ```
+
+<small>[See it in the notebook](https://github.com/O-2wice/cifar10-image-colorization/blob/main/notebooks/original-image-colorization.ipynb)</small>
 
 Both transforms are applied to the same PIL image, which is what keeps each
 input aligned with its target.
@@ -142,6 +149,10 @@ Every epoch writes two checkpoints: the best weights so far, and a resume file
 carrying optimizer state and history. Training runs on a Colab runtime that can
 disconnect, and the resume file is what makes an interruption cost one epoch
 instead of the whole run.
+
+The same run is available as a terminal script,
+[`scripts/train_colorization.py`](https://github.com/O-2wice/cifar10-image-colorization/blob/main/scripts/train_colorization.py),
+for training without a notebook.
 
 ```{python}
 #| label: epochs-table
