@@ -1,5 +1,6 @@
 # CIFAR-10 Image Colorization
 
+[![Read the report](https://img.shields.io/badge/read-the%20report-2b6cb0)](https://o-2wice.github.io/cifar10-image-colorization/)
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/O-2wice/cifar10-image-colorization/blob/main/notebooks/original-image-colorization.ipynb)
 ![Runtime](https://img.shields.io/badge/runtime-CPU%20or%20GPU-blue)
 ![Framework](https://img.shields.io/badge/framework-PyTorch-orange)
@@ -7,6 +8,14 @@
 Predict the colors of a grayscale image. Two PyTorch models are trained on the
 same task, loss and data: a convolutional colorizer and a fully connected
 baseline. The baseline has about 20x more parameters and still scores worse.
+
+**[Read the write-up](https://o-2wice.github.io/cifar10-image-colorization/)** for
+the method, the figures and the results.
+
+|                   | CNN         | Fully connected baseline |
+| ----------------- | ----------- | ------------------------ |
+| Parameters        | 150,019     | 3,148,800                |
+| Held-out test MSE | **0.0053**  | 0.0074                   |
 
 ## Quick Start
 
