@@ -1,0 +1,86 @@
+[
+  {
+    "objectID": "index.html",
+    "href": "index.html",
+    "title": "CIFAR-10 Image Colorization",
+    "section": "",
+    "text": "Colorization is a supervised image-to-image problem: the model receives a grayscale image and predicts the three colour channels that were removed.\nTwo PyTorch models are trained on the same task, the same loss and the same data. One is convolutional; the other flattens the image and maps pixels directly. The comparison is the point, because the second model has roughly 20 times more parameters and still loses.\nThe notebook, notebooks/original-image-colorization.ipynb, is the runnable artifact: it trains on a Colab GPU and writes the figures and metrics this page reads. That split keeps the page renderable on any machine, with no GPU, no dataset download and no checkpoints."
+  },
+  {
+    "objectID": "index.html#overview",
+    "href": "index.html#overview",
+    "title": "CIFAR-10 Image Colorization",
+    "section": "",
+    "text": "Colorization is a supervised image-to-image problem: the model receives a grayscale image and predicts the three colour channels that were removed.\nTwo PyTorch models are trained on the same task, the same loss and the same data. One is convolutional; the other flattens the image and maps pixels directly. The comparison is the point, because the second model has roughly 20 times more parameters and still loses.\nThe notebook, notebooks/original-image-colorization.ipynb, is the runnable artifact: it trains on a Colab GPU and writes the figures and metrics this page reads. That split keeps the page renderable on any machine, with no GPU, no dataset download and no checkpoints."
+  },
+  {
+    "objectID": "index.html#why-the-targets-are-not-normalized",
+    "href": "index.html#why-the-targets-are-not-normalized",
+    "title": "CIFAR-10 Image Colorization",
+    "section": "Why the Targets Are Not Normalized",
+    "text": "Why the Targets Are Not Normalized\nThis decision determines whether any of the numbers below mean anything.\nBoth models end in a sigmoid, which can only emit values in \\([0, 1]\\). The RGB targets are therefore produced with ToTensor() alone, which already maps pixels into that range, and no Normalize() is applied.\nThe coursework version this project grew out of normalized targets to \\([-1, 1]\\). A sigmoid cannot reach the negative half of that range, so those targets were unreachable by construction. The error contributed by the negative half alone is\n\\[\n\\mathbb{E}\\left[(0 - y)^2 \\;\\middle|\\; y &lt; 0\\right] \\cdot P(y &lt; 0) \\approx 0.16,\n\\]\nwhich is almost exactly where the original run plateaued: 0.1476 and 0.1529. The models were not underfitting. They were being asked to predict values they could not represent. After the fix, the same architectures reach around 0.005."
+  },
+  {
+    "objectID": "index.html#the-data",
+    "href": "index.html#the-data",
+    "title": "CIFAR-10 Image Colorization",
+    "section": "The Data",
+    "text": "The Data\nCIFAR-10 provides 60,000 32x32 colour images. The labels are unused: each image is its own supervision signal, with a grayscale copy as input and the original as target.\nclass GrayscaleToColorDataset(Dataset):\n    \"\"\"Return (grayscale input, RGB target) pairs from an image dataset.\"\"\"\n\n    def __getitem__(self, idx):\n        image, _ = self.dataset[idx]\n        return self.gray_transform(image), self.color_transform(image)\nBoth transforms are applied to the same PIL image, which is what keeps each input aligned with its target.\nThe 50,000 training images are split 45,000 / 5,000. Early stopping and checkpoint selection read only the validation split; the 10,000 test images are touched once, at the end.\n\n\n\nGrayscale inputs paired with the RGB targets the models are asked to reconstruct."
+  },
+  {
+    "objectID": "index.html#the-two-models",
+    "href": "index.html#the-two-models",
+    "title": "CIFAR-10 Image Colorization",
+    "section": "The Two Models",
+    "text": "The Two Models\nThe convolutional colorizer holds full resolution throughout. There is no pooling: a colour decision is needed at every pixel, so there is nothing to gain from compressing to a global summary and back.\nclass ColorizationCNN(nn.Module):\n    def __init__(self):\n        super().__init__()\n        self.conv1 = nn.Conv2d(1, 64, kernel_size=3, padding=1)\n        self.conv2 = nn.Conv2d(64, 128, kernel_size=3, padding=1)\n        self.conv3 = nn.Conv2d(128, 64, kernel_size=3, padding=1)\n        self.conv4 = nn.Conv2d(64, 3, kernel_size=3, padding=1)\n        self.sigmoid = nn.Sigmoid()\nThe baseline flattens the image and applies a single linear map. It has no notion of which pixels are neighbours, so it must learn every input-pixel to output-pixel relationship separately.\nclass ColorizationLinear(nn.Module):\n    def __init__(self, image_side=32):\n        super().__init__()\n        self.fc1 = nn.Linear(image_side * image_side, 3 * image_side * image_side)\nThat difference is the whole experiment: 150,019 parameters against 3,148,800."
+  },
+  {
+    "objectID": "index.html#choosing-a-loss",
+    "href": "index.html#choosing-a-loss",
+    "title": "CIFAR-10 Image Colorization",
+    "section": "Choosing a Loss",
+    "text": "Choosing a Loss\nPredicting continuous channel values is regression, which rules out cross-entropy. Mean squared error is used throughout:\n\\[\n\\mathcal{L}_{\\text{MSE}} = \\frac{1}{N} \\sum_{i=1}^{N} (y_i - \\hat{y}_i)^2\n\\]\nIt is cheap, differentiable everywhere, and penalises large errors disproportionately, which pushes the model off wildly wrong colours early.\nIts weakness shows up in the predictions below. Because the penalty is quadratic, the safest guess under uncertainty is the average of the plausible colours, so a model unsure whether a car is red or blue minimizes expected error by predicting grey-brown. Mean absolute error grows linearly and desaturates less; perceptual losses compare features from a pretrained network and match human judgement far better, at the cost of a second network.\nThe deeper limit is that no per-pixel loss can be fully right here. Colorization is ill-posed: a grey car could be red or blue, and both are correct. A per-pixel loss scores against the one colour the original photograph happened to have, penalising a plausible alternative as hard as a wrong one. Every number below sits under that ceiling."
+  },
+  {
+    "objectID": "index.html#training",
+    "href": "index.html#training",
+    "title": "CIFAR-10 Image Colorization",
+    "section": "Training",
+    "text": "Training\nAdam at 1e-3, batch size 64, up to 20 epochs, early stopping after two epochs without a validation improvement.\nEvery epoch writes two checkpoints: the best weights so far, and a resume file carrying optimizer state and history. Training runs on a Colab runtime that can disconnect, and the resume file is what makes an interruption cost one epoch instead of the whole run.\n\nBoth models stopped early, so both had converged rather than run out of budget: the CNN after 15 epochs, the baseline after 13.\n\n\n\n\n\n\n\nCNN\n\n\n\n\n\n\n\nFully connected baseline\n\n\n\n\n\nThe shapes differ in a way worth noting. The CNN drops almost to its final loss within one epoch and then flattens. The baseline descends gradually across all of its epochs, ending higher than where the CNN started flat."
+  },
+  {
+    "objectID": "index.html#results",
+    "href": "index.html#results",
+    "title": "CIFAR-10 Image Colorization",
+    "section": "Results",
+    "text": "Results\n\n\n\n\n\nCNN colorizer\nFully connected baseline\n\n\n\n\nTrainable parameters\n150,019\n3,148,800\n\n\nEpochs trained\n15\n13\n\n\nBest validation MSE\n0.0055\n0.0076\n\n\nHeld-out test MSE\n0.0053\n0.0074\n\n\n\nThe CNN reached the lower test MSE, by 28% relative, with 4.8% as many parameters as the baseline."
+  },
+  {
+    "objectID": "index.html#predictions",
+    "href": "index.html#predictions",
+    "title": "CIFAR-10 Image Colorization",
+    "section": "Predictions",
+    "text": "Predictions\n\n\nThe CNN keeps object boundaries intact and applies colour in coherent regions. The baseline produces blotchier output with colour that drifts across edges, which follows from having no representation of adjacency.\nBoth are muted against the ground truth. That is the MSE hedging described above, not undertraining, and it will not improve with more epochs."
+  },
+  {
+    "objectID": "index.html#what-the-cnn-learned",
+    "href": "index.html#what-the-cnn-learned",
+    "title": "CIFAR-10 Image Colorization",
+    "section": "What the CNN Learned",
+    "text": "What the CNN Learned\n\n\n\nActivations captured from the convolutional layers for a single test image.\n\n\nEarly layers respond to edges and local contrast. Later ones combine those into the regional decisions the final layer turns into colour."
+  },
+  {
+    "objectID": "index.html#what-the-baseline-learned",
+    "href": "index.html#what-the-baseline-learned",
+    "title": "CIFAR-10 Image Colorization",
+    "section": "What the Baseline Learned",
+    "text": "What the Baseline Learned\nA full weight row is not worth plotting: 1,023 of its 1,024 values sit near zero, so the image is a flat field under any colormap and the single cell that matters is a speck. Cropping around each output’s strongest weight, and tracking where that peak falls, shows the structure instead.\nThe peak lands on the matching pixel every time. Output \\(i\\) reads input pixel \\(i\\), so the baseline settled into a per-pixel intensity-to-colour lookup with a weak negative surround, and nothing resembling the edge or texture detectors a hidden layer in a deeper network would show."
+  },
+  {
+    "objectID": "index.html#takeaways",
+    "href": "index.html#takeaways",
+    "title": "CIFAR-10 Image Colorization",
+    "section": "Takeaways",
+    "text": "Takeaways\nThe parameter counts carry the result. A \\(3 \\times 3\\) filter is applied at all 1,024 positions, so the CNN learns one set of weights and reuses it everywhere. The baseline spends 3.1M parameters learning each input-pixel to output-pixel relationship separately, and arrives at a worse answer. The same effect appears three times on this page: in the parameter counts, in the test losses, and in the single-pixel weight maps.\nColour is where both fall short, and a different objective is what would fix it, not a different architecture.\nNext steps:\n\nan encoder-decoder with skip connections, so detail survives downsampling\nprediction in Lab space, colorizing only the ab channels and keeping the given L, which removes the brightness half of the problem\na perceptual or adversarial term to counteract the desaturation\nSSIM or LPIPS alongside MSE, since neither model should be judged only on the metric it was trained to minimize"
+  }
+]
