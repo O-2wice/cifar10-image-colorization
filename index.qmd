@@ -1,0 +1,707 @@
+---
+title: "CIFAR-10 Image Colorization"
+subtitle: "A PyTorch comparison of convolutional and fully connected grayscale-to-RGB colorizers"
+jupyter: cifar10-image-colorization
+params:
+  fast_dev_run: false
+  force_retrain: false
+  train_in_quarto: false
+  epochs: 10
+  progress_every: 100
+---
+
+## Overview
+
+This project treats image colorization as a supervised image-to-image learning problem. The model receives a grayscale CIFAR-10 image and predicts the corresponding RGB image.
+
+The experiment compares two PyTorch models:
+
+- **CNN colorizer:** a shallow convolutional network that keeps the image as a spatial grid.
+- **Fully connected baseline:** a single linear projection from flattened grayscale pixels to RGB pixels.
+
+The notebook is the runnable training artifact. This Quarto page is the portfolio presentation layer: it explains the workflow, renders the figures, and keeps the project readable on GitHub Pages.
+
+## Runtime Controls
+
+```{python}
+#| label: runtime-controls
+
+from pathlib import Path
+
+PROJECT_ROOT = Path.cwd()
+DATA_DIR = PROJECT_ROOT / "data"
+OUTPUT_DIR = PROJECT_ROOT / "outputs"
+MODEL_DIR = OUTPUT_DIR / "models"
+FIGURE_DIR = OUTPUT_DIR / "figures"
+METRIC_DIR = OUTPUT_DIR / "metrics"
+
+MODEL_DIR.mkdir(parents=True, exist_ok=True)
+FIGURE_DIR.mkdir(parents=True, exist_ok=True)
+METRIC_DIR.mkdir(parents=True, exist_ok=True)
+
+EPOCHS = int(params.get("epochs", 10)) if "params" in globals() else 10
+BATCH_SIZE = 64
+LEARNING_RATE = 1e-3
+PROGRESS_EVERY = int(params.get("progress_every", 100)) if "params" in globals() else 100
+FORCE_RETRAIN = bool(params.get("force_retrain", False)) if "params" in globals() else False
+FAST_DEV_RUN = bool(params.get("fast_dev_run", False)) if "params" in globals() else False
+TRAIN_IN_QUARTO = bool(params.get("train_in_quarto", False)) if "params" in globals() else False
+```
+
+The preferred workflow is to train in `notebooks/original-image-colorization.ipynb`, especially on Colab GPU, then render this page with `quarto render --no-execute` or `quarto preview --no-execute`.
+
+## Environment Setup
+
+```{python}
+#| label: imports
+
+import json
+import random
+import time
+
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import torchvision.transforms as transforms
+from torch.utils.data import DataLoader, Dataset, Subset, random_split
+from torchvision import datasets
+
+SEED = 42
+random.seed(SEED)
+np.random.seed(SEED)
+torch.manual_seed(SEED)
+
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+accelerator = "GPU" if torch.cuda.is_available() else "CPU"
+print(f"Runtime accelerator: {accelerator}")
+print(f"Using device: {device}")
+```
+
+## Dataset
+
+CIFAR-10 contains 60,000 small RGB images across 10 object categories. The labels are not used here. Each RGB image becomes the target, and a grayscale copy of the same image becomes the input.
+
+### Why the targets are not normalized
+
+This is the single most consequential preprocessing decision in the project, so
+it is worth stating before any code runs.
+
+Both models end in a `sigmoid`, which can only emit values in $[0, 1]$. The RGB
+targets are therefore produced with `ToTensor()` alone, which already maps pixels
+into $[0, 1]$, and no `Normalize()` is applied.
+
+The coursework version this project grew out of did normalize the targets to
+$[-1, 1]$. That puts roughly half the target range beyond anything a sigmoid can
+ever output, and it floors the achievable error regardless of architecture or
+training time. For targets spread across $[-1, 1]$ while predictions are confined
+to $[0, 1]$, the unavoidable contribution from the negative half alone is
+
+$$
+\mathbb{E}\left[(0 - y)^2 \;\middle|\; y < 0\right] \cdot P(y < 0) \approx 0.16,
+$$
+
+which is almost exactly the loss the original run plateaued at. The models were
+not underfitting; they were being asked to predict values they could not
+represent. Removing the normalization is what makes the loss numbers on this page
+meaningful.
+
+```{python}
+#| label: transforms
+
+# CIFAR-10 is natively 32x32, so no resize is needed; leaving it out removes a
+# redundant pass over every sample. Both transforms are applied to the same PIL
+# image below, which is what keeps each input aligned with its target.
+color_transform = transforms.ToTensor()
+
+gray_transform = transforms.Compose([
+    transforms.Grayscale(num_output_channels=1),
+    transforms.ToTensor(),
+])
+```
+
+```{python}
+#| label: paired-dataset
+
+class GrayscaleToColorDataset(Dataset):
+    def __init__(self, dataset, gray_transform, color_transform):
+        self.dataset = dataset
+        self.gray_transform = gray_transform
+        self.color_transform = color_transform
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, idx):
+        image, _ = self.dataset[idx]
+        gray_image = self.gray_transform(image)
+        color_image = self.color_transform(image)
+        return gray_image, color_image
+```
+
+```{python}
+#| label: load-data
+
+train_base = datasets.CIFAR10(root=DATA_DIR, train=True, download=True)
+test_base = datasets.CIFAR10(root=DATA_DIR, train=False, download=True)
+
+full_train_dataset = GrayscaleToColorDataset(train_base, gray_transform, color_transform)
+test_dataset = GrayscaleToColorDataset(test_base, gray_transform, color_transform)
+
+if FAST_DEV_RUN:
+    full_train_dataset = Subset(full_train_dataset, range(1024))
+    test_dataset = Subset(test_dataset, range(256))
+
+validation_size = min(5000, max(1, len(full_train_dataset) // 10))
+training_size = len(full_train_dataset) - validation_size
+train_dataset, val_dataset = random_split(
+    full_train_dataset,
+    [training_size, validation_size],
+    generator=torch.Generator().manual_seed(SEED),
+)
+
+train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=0)
+val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=0)
+test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=0)
+
+print(f"Training samples: {len(train_dataset):,}")
+print(f"Validation samples: {len(val_dataset):,}")
+print(f"Test samples: {len(test_dataset):,}")
+```
+
+```{python}
+#| label: show-pairs
+#| fig-cap: "CIFAR-10 grayscale inputs paired with RGB targets."
+
+def show_training_pairs(loader, rows=6):
+    gray_images, color_images = next(iter(loader))
+    rows = min(rows, gray_images.size(0))
+
+    fig, axes = plt.subplots(rows, 2, figsize=(7, 2.4 * rows))
+    for i in range(rows):
+        axes[i, 0].imshow(gray_images[i].squeeze(), cmap="gray")
+        axes[i, 0].set_title("Grayscale input")
+        axes[i, 0].axis("off")
+
+        axes[i, 1].imshow(color_images[i].permute(1, 2, 0).clamp(0, 1))
+        axes[i, 1].set_title("RGB target")
+        axes[i, 1].axis("off")
+
+    plt.tight_layout()
+
+show_training_pairs(train_loader)
+```
+
+## CNN Colorization Model
+
+The CNN uses four convolutional layers with ReLU activations and a sigmoid output. It keeps the image in grid form throughout the forward pass.
+
+```{python}
+#| label: cnn-model
+
+class ColorizationCNN(nn.Module):
+    def __init__(self):
+        super(ColorizationCNN, self).__init__()
+        self.conv1 = nn.Conv2d(1, 64, kernel_size=3, padding=1)
+        self.relu1 = nn.ReLU()
+        self.conv2 = nn.Conv2d(64, 128, kernel_size=3, padding=1)
+        self.relu2 = nn.ReLU()
+        self.conv3 = nn.Conv2d(128, 64, kernel_size=3, padding=1)
+        self.relu3 = nn.ReLU()
+        self.conv4 = nn.Conv2d(64, 3, kernel_size=3, padding=1)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        x = self.relu1(self.conv1(x))
+        x = self.relu2(self.conv2(x))
+        x = self.relu3(self.conv3(x))
+        x = self.sigmoid(self.conv4(x))
+        return x
+```
+
+## Fully Connected Baseline
+
+The baseline flattens each grayscale input and maps it directly to RGB pixels. It is deliberately simple so the architectural comparison is easy to interpret.
+
+```{python}
+#| label: fcn-model
+
+class ColorizationLinear(nn.Module):
+    def __init__(self):
+        super(ColorizationLinear, self).__init__()
+        self.fc1 = nn.Linear(32 * 32, 3 * 32 * 32)
+
+    def forward(self, x):
+        x = x.view(x.size(0), -1)
+        x = self.fc1(x)
+        x = x.view(x.size(0), 3, 32, 32)
+        x = torch.sigmoid(x)
+        return x
+```
+
+## Model Size
+
+```{python}
+#| label: model-size
+
+def count_parameters(model):
+    return sum(parameter.numel() for parameter in model.parameters() if parameter.requires_grad)
+
+model_cnn = ColorizationCNN().to(device)
+model_fcn = ColorizationLinear().to(device)
+
+{
+    "CNN trainable parameters": count_parameters(model_cnn),
+    "FCN trainable parameters": count_parameters(model_fcn),
+}
+```
+
+## Choosing a Loss Function
+
+Colorization as framed here is **regression**, not classification: the network
+predicts a continuous value for each of the three colour channels at every pixel.
+That rules out cross-entropy and puts a handful of distance measures in play.
+
+**Mean squared error** is the choice used throughout this project:
+
+$$
+\mathcal{L}_{\text{MSE}} = \frac{1}{N} \sum_{i=1}^{N} (y_i - \hat{y}_i)^2
+$$
+
+It is differentiable everywhere, cheap, and penalises large errors
+disproportionately, which pushes the model away from wildly wrong colours early
+in training. Its weakness is specific and visible in the results below: because
+the penalty is quadratic, the safest prediction under uncertainty is the *average*
+of the plausible colours. A grey-brown wash costs less than a confident guess
+that lands wrong, so MSE-trained colorizers systematically desaturate.
+
+**Mean absolute error** ($L_1$) grows linearly with the error instead:
+
+$$
+\mathcal{L}_{L_1} = \frac{1}{N} \sum_{i=1}^{N} \lvert y_i - \hat{y}_i \rvert
+$$
+
+It tolerates outliers better and tends to produce slightly less washed-out
+output, at the cost of a gradient that does not shrink as predictions improve.
+
+**Perceptual losses** compare features extracted by a pretrained network rather
+than raw pixels, which matches human judgement far more closely. They are the
+right tool for a colorization system meant to look good, and out of scope here:
+they need a second network and shift the goal from reconstruction accuracy to
+plausibility.
+
+The deeper issue is that no per-pixel loss can be fully correct for this task.
+Colorization is **ill-posed** — a grey car is equally plausibly red or blue, and
+both are legitimate answers. A per-pixel loss scores the model against the one
+colour the original photograph happened to have, so it penalises plausible
+alternatives just as hard as implausible ones. That ceiling sits above every
+number reported on this page.
+
+## Training Helpers
+
+```{python}
+#| label: training-helpers
+
+def evaluate_loss(model, loader, criterion):
+    model.eval()
+    total_loss = 0.0
+    total_samples = 0
+
+    with torch.no_grad():
+        for gray_images, color_images in loader:
+            gray_images = gray_images.to(device)
+            color_images = color_images.to(device)
+            predictions = model(gray_images)
+            loss = criterion(predictions, color_images)
+            total_loss += loss.item() * gray_images.size(0)
+            total_samples += gray_images.size(0)
+
+    return total_loss / total_samples
+
+
+def train_model(
+    model,
+    optimizer,
+    criterion,
+    train_loader,
+    val_loader,
+    epochs=10,
+    checkpoint_path="best_model.pth",
+    patience=2,
+    progress_every=100,
+):
+    best_val_loss = float("inf")
+    history = {"train_loss": [], "val_loss": []}
+    early_stop_counter = 0
+
+    for epoch in range(epochs):
+        model.train()
+        running_loss = 0.0
+        seen_samples = 0
+        epoch_start = time.time()
+
+        for batch_idx, (gray_images, color_images) in enumerate(train_loader, start=1):
+            gray_images = gray_images.to(device)
+            color_images = color_images.to(device)
+
+            optimizer.zero_grad()
+            predictions = model(gray_images)
+            loss = criterion(predictions, color_images)
+            loss.backward()
+            optimizer.step()
+
+            # Weight by batch size so the short final batch of an epoch does not
+            # distort the mean; `evaluate_loss` uses the same convention, which
+            # keeps the two curves comparable.
+            running_loss += loss.item() * gray_images.size(0)
+            seen_samples += gray_images.size(0)
+
+            if batch_idx == 1 or batch_idx % progress_every == 0 or batch_idx == len(train_loader):
+                elapsed = time.time() - epoch_start
+                print(
+                    f"Epoch {epoch + 1:02d}/{epochs} "
+                    f"batch {batch_idx:04d}/{len(train_loader)} "
+                    f"loss: {loss.item():.4f} "
+                    f"elapsed: {elapsed / 60:.1f} min",
+                    flush=True,
+                )
+
+        train_loss = running_loss / seen_samples
+        val_loss = evaluate_loss(model, val_loader, criterion)
+        history["train_loss"].append(train_loss)
+        history["val_loss"].append(val_loss)
+
+        print(
+            f"Epoch {epoch + 1:02d}/{epochs} complete | "
+            f"Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}",
+            flush=True,
+        )
+
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            torch.save(model.state_dict(), checkpoint_path)
+            print(f"Validation loss improved. Saving model to {checkpoint_path}")
+            early_stop_counter = 0
+        else:
+            early_stop_counter += 1
+            print(f"Validation loss did not improve. Early stop counter: {early_stop_counter}/{patience}")
+
+        if early_stop_counter >= patience:
+            print(f"Early stopping triggered after {patience} epochs without improvement.")
+            break
+
+    return history
+```
+
+```{python}
+#| label: train-or-load
+
+criterion = nn.MSELoss()
+checkpoint_path_cnn = MODEL_DIR / "best_model_cnn.pth"
+checkpoint_path_fcn = MODEL_DIR / "best_model_fcn.pth"
+history_path = METRIC_DIR / "training_history.json"
+
+artifacts_exist = checkpoint_path_cnn.exists() and checkpoint_path_fcn.exists() and history_path.exists()
+should_train = FORCE_RETRAIN or not artifacts_exist
+
+if should_train and not TRAIN_IN_QUARTO:
+    raise RuntimeError(
+        "Training artifacts are missing. Run the notebook in Colab, or run "
+        "python scripts\\train_colorization.py --epochs 10 --progress-every 100 "
+        "from the project root."
+    )
+
+if should_train:
+    optimizer_cnn = optim.Adam(model_cnn.parameters(), lr=LEARNING_RATE)
+    optimizer_fcn = optim.Adam(model_fcn.parameters(), lr=LEARNING_RATE)
+
+    cnn_history = train_model(
+        model_cnn,
+        optimizer_cnn,
+        criterion,
+        train_loader,
+        val_loader,
+        epochs=EPOCHS,
+        checkpoint_path=checkpoint_path_cnn,
+        patience=2,
+        progress_every=PROGRESS_EVERY,
+    )
+
+    fcn_history = train_model(
+        model_fcn,
+        optimizer_fcn,
+        criterion,
+        train_loader,
+        val_loader,
+        epochs=EPOCHS,
+        checkpoint_path=checkpoint_path_fcn,
+        patience=2,
+        progress_every=PROGRESS_EVERY,
+    )
+
+    with history_path.open("w", encoding="utf-8") as file:
+        json.dump({"cnn": cnn_history, "fcn": fcn_history}, file, indent=2)
+else:
+    print("Loading saved checkpoints and training history.")
+    with history_path.open("r", encoding="utf-8") as file:
+        history = json.load(file)
+    cnn_history = history["cnn"]
+    fcn_history = history["fcn"]
+
+model_cnn.load_state_dict(torch.load(checkpoint_path_cnn, map_location=device))
+model_cnn.eval()
+
+model_fcn.load_state_dict(torch.load(checkpoint_path_fcn, map_location=device))
+model_fcn.eval()
+```
+
+## Training Curves
+
+```{python}
+#| label: training-curves
+#| fig-cap: "Training and validation loss for the CNN and fully connected baseline."
+
+def plot_history(history, title):
+    plt.plot(history["train_loss"], label="Training")
+    plt.plot(history["val_loss"], label="Validation")
+    plt.title(title)
+    plt.xlabel("Epoch")
+    plt.ylabel("MSE loss")
+    plt.grid(alpha=0.3)
+    plt.legend()
+
+plt.figure(figsize=(12, 4))
+plt.subplot(1, 2, 1)
+plot_history(cnn_history, "CNN")
+plt.subplot(1, 2, 2)
+plot_history(fcn_history, "Fully Connected Baseline")
+plt.tight_layout()
+```
+
+## Test Results
+
+```{python}
+#| label: test-results
+
+cnn_test_loss = evaluate_loss(model_cnn, test_loader, criterion)
+fcn_test_loss = evaluate_loss(model_fcn, test_loader, criterion)
+
+results = {
+    "cnn_test_loss": cnn_test_loss,
+    "fcn_test_loss": fcn_test_loss,
+}
+
+with (METRIC_DIR / "test_results.json").open("w", encoding="utf-8") as file:
+    json.dump(results, file, indent=2)
+
+{
+    "CNN test loss": round(cnn_test_loss, 4),
+    "FCN test loss": round(fcn_test_loss, 4),
+}
+```
+
+The held-out test split is used only here, after model selection. Lower MSE means the predicted RGB image is numerically closer to the original RGB target.
+
+## Prediction Examples
+
+```{python}
+#| label: prediction-examples
+#| fig-cap: "Predicted color images compared with grayscale inputs and RGB ground truth."
+
+def show_predictions(model_cnn, model_fcn, loader, n=2):
+    model_cnn.eval()
+    model_fcn.eval()
+
+    gray_images, color_images = next(iter(loader))
+    gray_images = gray_images.to(device)
+    color_images = color_images.to(device)
+
+    with torch.no_grad():
+        cnn_outputs = model_cnn(gray_images)
+        fcn_outputs = model_fcn(gray_images)
+
+    n = min(n, gray_images.size(0))
+
+    for sample_idx in range(n):
+        gray_img = gray_images[sample_idx].cpu().numpy().squeeze()
+        color_img = color_images[sample_idx].cpu().numpy().transpose((1, 2, 0))
+        cnn_pred = cnn_outputs[sample_idx].cpu().numpy().transpose((1, 2, 0))
+        fcn_pred = fcn_outputs[sample_idx].cpu().numpy().transpose((1, 2, 0))
+
+        cnn_loss = criterion(cnn_outputs[sample_idx:sample_idx + 1], color_images[sample_idx:sample_idx + 1])
+        fcn_loss = criterion(fcn_outputs[sample_idx:sample_idx + 1], color_images[sample_idx:sample_idx + 1])
+
+        fig, axes = plt.subplots(2, 3, figsize=(12, 8))
+        axes[0, 0].imshow(gray_img, cmap="gray")
+        axes[0, 0].set_title("Grayscale Input")
+        axes[0, 0].axis("off")
+
+        axes[0, 1].imshow(np.clip(cnn_pred, 0, 1))
+        axes[0, 1].set_title(f"CNN Prediction\nLoss: {cnn_loss.item():.4f}")
+        axes[0, 1].axis("off")
+
+        axes[0, 2].imshow(np.clip(color_img, 0, 1))
+        axes[0, 2].set_title("Ground Truth")
+        axes[0, 2].axis("off")
+
+        axes[1, 0].imshow(gray_img, cmap="gray")
+        axes[1, 0].set_title("Grayscale Input")
+        axes[1, 0].axis("off")
+
+        axes[1, 1].imshow(np.clip(fcn_pred, 0, 1))
+        axes[1, 1].set_title(f"FCN Prediction\nLoss: {fcn_loss.item():.4f}")
+        axes[1, 1].axis("off")
+
+        axes[1, 2].imshow(np.clip(color_img, 0, 1))
+        axes[1, 2].set_title("Ground Truth")
+        axes[1, 2].axis("off")
+
+        plt.tight_layout()
+        plt.show()
+
+show_predictions(model_cnn, model_fcn, test_loader)
+```
+
+## Feature Inspection
+
+Feature maps show how the trained CNN transforms a grayscale input through its convolutional layers.
+
+```{python}
+#| label: cnn-feature-maps
+#| fig-cap: "Feature maps captured from the trained CNN colorizer."
+
+feature_maps = []
+
+def hook_fn(module, input, output):
+    feature_maps.append(output.detach().cpu())
+
+
+def show_feature_maps(model, loader, max_features=10):
+    model.eval()
+    feature_maps.clear()
+    hooks = []
+    layer_names = []
+
+    for name, module in model.named_modules():
+        if isinstance(module, nn.Conv2d):
+            hooks.append(module.register_forward_hook(hook_fn))
+            layer_names.append(name)
+
+    gray_images, _ = next(iter(loader))
+    sample = gray_images[:1].to(device)
+
+    with torch.no_grad():
+        model(sample)
+
+    for hook in hooks:
+        hook.remove()
+
+    for layer_name, feature_map in zip(layer_names, feature_maps):
+        feature_map = feature_map.squeeze(0).numpy()
+        num_features = min(max_features, feature_map.shape[0])
+
+        fig, axes = plt.subplots(1, num_features, figsize=(1.7 * num_features, 2.2))
+        if num_features == 1:
+            axes = [axes]
+
+        for j in range(num_features):
+            axes[j].imshow(feature_map[j], cmap="viridis")
+            axes[j].set_title(f"Map {j + 1}")
+            axes[j].axis("off")
+
+        plt.suptitle(f"{layer_name} Feature Maps")
+        plt.tight_layout()
+        plt.show()
+
+show_feature_maps(model_cnn, test_loader)
+```
+
+The baseline can be inspected the same way, with one caveat about what is being
+looked at. `fc1` is its *only* layer, so these are output weights, not
+hidden-feature detectors: row $i$ of the weight matrix holds the 1,024
+coefficients that output value $i$ applies to the grayscale input.
+
+Reshaping a row back to $32 \times 32$ answers a precise question — *which input
+pixels does this one output value read from?* Since the colour at a pixel is
+dominated by the brightness at that same pixel, the expected pattern is a bright
+spot at the corresponding location on an otherwise flat field, rather than the
+edges and textures a deeper network's hidden layer would show.
+
+That localized response is the finding rather than a disappointment: it is direct
+evidence that the baseline learned a near per-pixel intensity-to-colour lookup,
+with none of the spatial context a convolution gets for free.
+
+```{python}
+#| label: fcn-weight-visualization
+#| fig-cap: "Input weights behind the first few FCN outputs, reshaped to the 32x32 input grid."
+
+def show_fcn_weights(model, num_units=10):
+    """Reshape the first `num_units` output rows of fc1 into 32x32 input maps."""
+    weights = model.fc1.weight.detach().cpu().numpy()
+    num_units = min(num_units, weights.shape[0])
+
+    fig, axes = plt.subplots(1, num_units, figsize=(1.7 * num_units, 2.2))
+    if num_units == 1:
+        axes = [axes]
+
+    for i in range(num_units):
+        # Row i covers all 1,024 grayscale inputs feeding output value i.
+        axes[i].imshow(weights[i].reshape(32, 32), cmap="gray")
+        axes[i].set_title(f"Output {i + 1}")
+        axes[i].axis("off")
+
+    plt.suptitle("Input weights behind the first few FCN outputs")
+    plt.tight_layout()
+
+show_fcn_weights(model_fcn)
+```
+
+## Takeaways
+
+```{python}
+#| label: summary-table
+#| output: asis
+
+# Built from the values computed above so the narrative cannot drift from the run.
+cnn_params = count_parameters(model_cnn)
+fcn_params = count_parameters(model_fcn)
+better, worse = ("CNN", "baseline") if cnn_test_loss < fcn_test_loss else ("baseline", "CNN")
+gap = abs(cnn_test_loss - fcn_test_loss) / max(cnn_test_loss, fcn_test_loss) * 100
+
+print(f"""
+| | CNN colorizer | Fully connected baseline |
+|---|---|---|
+| Trainable parameters | {cnn_params:,} | {fcn_params:,} |
+| Best validation MSE | {min(cnn_history['val_loss']):.4f} | {min(fcn_history['val_loss']):.4f} |
+| Held-out test MSE | {cnn_test_loss:.4f} | {fcn_test_loss:.4f} |
+
+The **{better}** reached the lower test MSE in this run, by {gap:.1f}% relative to
+the {worse}, using {cnn_params / fcn_params:.1%} as many parameters as the baseline.
+""")
+```
+
+The parameter ratio is the point worth sitting with. The CNN wins while carrying a
+small fraction of the baseline's weights, because a $3 \times 3$ filter is reused at
+all 1,024 pixel positions instead of being relearned for each one. The baseline
+spends 3.1M parameters rediscovering, separately for every output pixel, a
+relationship the convolution gets for free from its architecture. That is what
+"inductive bias" means in practice, and it is visible in three places on this page
+at once: the parameter counts, the test losses, and the localized blobs in the
+weight visualization.
+
+What neither model does well is colour. Both outputs are muted next to the ground
+truth, and the reason is structural rather than a matter of training longer: MSE
+rewards hedging toward the average of every plausible colour, as described in the
+loss section. A model uncertain whether a car is red or blue minimizes its expected
+squared error by predicting grey-brown. Fixing that requires changing the objective,
+not the architecture.
+
+**Where this would go next:**
+
+- an encoder-decoder with skip connections, so fine detail survives downsampling
+- prediction in Lab space, colorizing only the `ab` channels and keeping the given
+  `L` intact, which removes the brightness half of the problem entirely
+- a perceptual or adversarial loss term to counteract the desaturation
+- SSIM or LPIPS alongside MSE, since neither model should be judged on the metric
+  it was trained to minimize

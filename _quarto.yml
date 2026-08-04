@@ -1,0 +1,33 @@
+project:
+  type: website
+  output-dir: docs
+  render:
+    - index.qmd
+
+website:
+  title: "CIFAR-10 Image Colorization"
+  navbar:
+    left:
+      - href: index.qmd
+        text: Project
+
+format:
+  html:
+    theme:
+      light: cosmo
+      dark: darkly
+    toc: true
+    toc-depth: 3
+    code-fold: show
+    code-tools: true
+    smooth-scroll: true
+    df-print: paged
+
+execute:
+  # freeze stores executed results under _freeze/, which is committed. A clone
+  # without CIFAR-10, the checkpoints or a GPU can then still render the full
+  # page, figures included. Delete _freeze/ or pass --force to re-execute.
+  freeze: auto
+  cache: false
+  warning: false
+  message: false

@@ -1,0 +1,9 @@
+ipykernel
+jupyter-client
+nbclient
+nbformat
+matplotlib
+numpy
+torch
+torchvision
+papermill
