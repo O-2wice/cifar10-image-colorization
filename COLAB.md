@@ -16,22 +16,35 @@ There is no separate Colab-only notebook. The badge opens the notebook directly 
 
 Local CPU training is slow for this project. Colab lets the expensive training run on hosted GPU hardware while the project files stay organized locally.
 
-## Workflow
+## Workflow (VS Code)
 
 1. Open this repository in VS Code.
 2. Open `notebooks/original-image-colorization.ipynb`.
 3. In the notebook toolbar, choose `Select Kernel > Colab > Auto Connect`.
 4. Sign in when prompted.
-5. In Colab, set the runtime to GPU.
-6. Run the notebook cells from top to bottom.
-7. The training cells save best checkpoints under `outputs/models/` and metrics under `outputs/metrics/`.
-8. Run the final notebook cell to download `image-colorization-outputs.zip`.
-9. Extract that zip into the local project folder so `outputs/` is refreshed.
-10. Render the report:
+5. Pick a GPU runtime.
+6. Run the cells from top to bottom. The setup cell prints `Runtime accelerator: GPU` and `Running in Colab: True` when the connection is live — check both before starting a long run.
+7. Run the Drive mount cell before training. This is how results get off the runtime on this route.
+8. The training cells write best checkpoints to `outputs/models/` and metrics to `outputs/metrics/` **on the Colab machine**, not on your laptop.
+9. Run the final cell. With Drive mounted it copies `image-colorization-outputs.zip` to `MyDrive/cifar10-image-colorization/`.
+10. Download that zip from Drive and extract it over the local `outputs/` folder.
+11. Render the report locally:
 
 ```powershell
 quarto render
 ```
+
+## Browser Colab vs the VS Code Extension
+
+Both attach to the same kind of Colab VM, but they differ in one way that matters here: the browser has a bridge that can push a file straight to your downloads folder, and the VS Code extension does not.
+
+The notebook handles both. It detects the runtime by checking whether the `google.colab` package is *installed*, rather than whether it has been imported — the browser frontend imports it at startup, while the VS Code extension attaches a plain kernel to the same machine and does not. Checking `sys.modules` would therefore report "not Colab" on a real Colab GPU and silently disable the DataLoader workers.
+
+The final cell tries Drive first, then a direct browser download, and otherwise reports where the archive sits on the runtime.
+
+## Your Files Are Not On The Runtime
+
+The notebook is edited locally but executes remotely, so the Colab machine does not see your repository. This is fine: the notebook downloads CIFAR-10 itself and writes everything relative to the runtime's working directory. It does mean anything you want to keep has to be copied off deliberately, which is what the Drive step is for.
 
 ## If the Session Drops
 
