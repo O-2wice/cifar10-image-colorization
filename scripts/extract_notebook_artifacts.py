@@ -40,6 +40,9 @@ EPOCH_PATTERN = re.compile(
     r"Epoch (\d+)/\d+ complete \| train ([\d.]+) \| val ([\d.]+)"
 )
 TEST_PATTERN = re.compile(r"Test Loss for (\w+) model: ([\d.]+)")
+HISTORY_BLOCK = re.compile(
+    r"HISTORY_JSON_BEGIN\s*(.*?)\s*HISTORY_JSON_END", re.DOTALL
+)
 
 
 def cell_text(cell: dict) -> str:
@@ -100,7 +103,13 @@ def extract_figures(notebook: dict, figure_dir: Path) -> list[Path]:
 
 
 def extract_metrics(notebook: dict) -> tuple[dict, dict]:
-    """Rebuild the loss history and test results from the printed logs."""
+    """Rebuild the loss history and test results from the notebook output.
+
+    The echoed JSON block is authoritative. Per-epoch log lines are only a
+    fallback, because a run that resumed from a checkpoint prints just the
+    epochs it executed and would understate the curve.
+    """
+    echoed: dict | None = None
     histories: list[dict] = []
     test_results: dict[str, float] = {}
 
@@ -109,6 +118,10 @@ def extract_metrics(notebook: dict) -> tuple[dict, dict]:
             continue
 
         text = cell_text(cell)
+
+        block = HISTORY_BLOCK.search(text)
+        if block:
+            echoed = json.loads(block.group(1).strip())
 
         epochs = EPOCH_PATTERN.findall(text)
         if epochs:
@@ -120,15 +133,22 @@ def extract_metrics(notebook: dict) -> tuple[dict, dict]:
         for name, value in TEST_PATTERN.findall(text):
             test_results[f"{name.lower()}_test_loss"] = float(value)
 
+    if echoed is not None:
+        return echoed, test_results
+
     if len(histories) < 2:
         raise SystemExit(
             f"Expected two training histories in the notebook, found {len(histories)}. "
             "Run every training cell and save the notebook before extracting."
         )
 
+    print(
+        "Warning: no echoed history block found, falling back to the per-epoch\n"
+        "         log lines. If this run resumed from a checkpoint, the recovered\n"
+        "         curve covers only the epochs this run executed."
+    )
     # The CNN trains first, so the histories arrive in that order.
-    history = {"cnn": histories[0], "fcn": histories[1]}
-    return history, test_results
+    return {"cnn": histories[0], "fcn": histories[1]}, test_results
 
 
 def main() -> int:
