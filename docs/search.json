@@ -53,7 +53,7 @@
     "href": "index.html#results",
     "title": "CIFAR-10 Image Colorization",
     "section": "Results",
-    "text": "Results\n\n\n\n\n\nCNN colorizer\nFully connected baseline\n\n\n\n\nTrainable parameters\n150,019\n3,148,800\n\n\nEpochs trained\n15\n13\n\n\nBest validation MSE\n0.0055\n0.0076\n\n\nHeld-out test MSE\n0.0053\n0.0074\n\n\n\nThe CNN reached the lower test MSE, by 28% relative, with 4.8% as many parameters as the baseline."
+    "text": "Results\n\n\n\n\n\nCNN colorizer\nFully connected baseline\n\n\n\n\nTrainable parameters\n150,019\n3,148,800\n\n\nEpochs trained\n15\n13\n\n\nBest validation MSE\n0.0055\n0.0076\n\n\nHeld-out test MSE\n0.0053\n0.0074\n\n\n\nThe CNN reached the lower test MSE, by 29% relative, with 4.8% as many parameters as the baseline."
   },
   {
     "objectID": "index.html#predictions",
@@ -74,7 +74,7 @@
     "href": "index.html#what-the-baseline-learned",
     "title": "CIFAR-10 Image Colorization",
     "section": "What the Baseline Learned",
-    "text": "What the Baseline Learned\nA full weight row is not worth plotting: 1,023 of its 1,024 values sit near zero, so the image is a flat field under any colormap and the single cell that matters is a speck. Cropping around each output’s strongest weight, and tracking where that peak falls, shows the structure instead.\nThe peak lands on the matching pixel every time. Output \\(i\\) reads input pixel \\(i\\), so the baseline settled into a per-pixel intensity-to-colour lookup with a weak negative surround, and nothing resembling the edge or texture detectors a hidden layer in a deeper network would show."
+    "text": "What the Baseline Learned\nA full weight row is not worth plotting: 1,023 of its 1,024 values sit near zero, so the image is a flat field under any colormap and the single cell that matters is a speck. Cropping around each output’s strongest weight, and tracking where that peak falls, shows the structure instead.\n\n\n\nTop: 9x9 crops centred on each output’s strongest weight. Bottom: the location of that peak against the output index, across 96 outputs.\n\n\nThe peak lands on the matching pixel for 96 of 96 outputs checked, which is the diagonal in the lower panel. Output \\(i\\) reads input pixel \\(i\\).\nThe crops add one detail the diagonal alone does not. Around each peak sits a weaker band of positive weight over the immediate neighbours, so the baseline is not quite a pure per-pixel lookup: it leans slightly on the surrounding brightness, averaging over a small neighbourhood before choosing a colour.\nThat is the interesting part. Given no architectural notion of adjacency, and 3.1M free parameters with which to learn anything at all, the model spent them rediscovering that neighbouring pixels are related — approximating, badly and expensively, what a convolution is handed for free. It also shows nothing resembling the edge or texture detectors a hidden layer in a deeper network would develop, because there is no hidden layer in which they could form."
   },
   {
     "objectID": "index.html#takeaways",

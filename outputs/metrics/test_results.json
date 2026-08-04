@@ -1,4 +1,4 @@
 {
-  "cnn_test_loss": 0.0053,
-  "fcn_test_loss": 0.0074
+  "cnn_test_loss": 0.005296661251410842,
+  "fcn_test_loss": 0.007446625655889511
 }

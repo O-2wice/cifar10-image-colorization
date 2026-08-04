@@ -524,7 +524,7 @@ window.Quarto = {
 </tr>
 </tbody>
 </table>
-<p>The CNN reached the lower test MSE, by 28% relative, with 4.8% as many parameters as the baseline.</p>
+<p>The CNN reached the lower test MSE, by 29% relative, with 4.8% as many parameters as the baseline.</p>
 </div>
 </section>
 <section id="predictions" class="level2">
@@ -547,7 +547,15 @@ window.Quarto = {
 <section id="what-the-baseline-learned" class="level2">
 <h2 class="anchored" data-anchor-id="what-the-baseline-learned">What the Baseline Learned</h2>
 <p>A full weight row is not worth plotting: 1,023 of its 1,024 values sit near zero, so the image is a flat field under any colormap and the single cell that matters is a speck. Cropping around each output’s strongest weight, and tracking where that peak falls, shows the structure instead.</p>
-<p>The peak lands on the matching pixel every time. Output <span class="math inline">\(i\)</span> reads input pixel <span class="math inline">\(i\)</span>, so the baseline settled into a per-pixel intensity-to-colour lookup with a weak negative surround, and nothing resembling the edge or texture detectors a hidden layer in a deeper network would show.</p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="outputs/figures/fcn-weights.png" class="img-fluid figure-img"></p>
+<figcaption>Top: 9x9 crops centred on each output’s strongest weight. Bottom: the location of that peak against the output index, across 96 outputs.</figcaption>
+</figure>
+</div>
+<p>The peak lands on the matching pixel for <strong>96 of 96</strong> outputs checked, which is the diagonal in the lower panel. Output <span class="math inline">\(i\)</span> reads input pixel <span class="math inline">\(i\)</span>.</p>
+<p>The crops add one detail the diagonal alone does not. Around each peak sits a weaker band of <em>positive</em> weight over the immediate neighbours, so the baseline is not quite a pure per-pixel lookup: it leans slightly on the surrounding brightness, averaging over a small neighbourhood before choosing a colour.</p>
+<p>That is the interesting part. Given no architectural notion of adjacency, and 3.1M free parameters with which to learn anything at all, the model spent them rediscovering that neighbouring pixels are related — approximating, badly and expensively, what a convolution is handed for free. It also shows nothing resembling the edge or texture detectors a hidden layer in a deeper network would develop, because there is no hidden layer in which they could form.</p>
 </section>
 <section id="takeaways" class="level2">
 <h2 class="anchored" data-anchor-id="takeaways">Takeaways</h2>
@@ -1265,31 +1273,43 @@ window.Quarto = {
 <span id="cb4-238"><a href="#cb4-238" aria-hidden="true" tabindex="-1"></a>matters is a speck. Cropping around each output's strongest weight, and tracking</span>
 <span id="cb4-239"><a href="#cb4-239" aria-hidden="true" tabindex="-1"></a>where that peak falls, shows the structure instead.</span>
 <span id="cb4-240"><a href="#cb4-240" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-241"><a href="#cb4-241" aria-hidden="true" tabindex="-1"></a>The peak lands on the matching pixel every time. Output $i$ reads input pixel</span>
-<span id="cb4-242"><a href="#cb4-242" aria-hidden="true" tabindex="-1"></a>$i$, so the baseline settled into a per-pixel intensity-to-colour lookup with a</span>
-<span id="cb4-243"><a href="#cb4-243" aria-hidden="true" tabindex="-1"></a>weak negative surround, and nothing resembling the edge or texture detectors a</span>
-<span id="cb4-244"><a href="#cb4-244" aria-hidden="true" tabindex="-1"></a>hidden layer in a deeper network would show.</span>
+<span id="cb4-241"><a href="#cb4-241" aria-hidden="true" tabindex="-1"></a><span class="al">![Top: 9x9 crops centred on each output's strongest weight. Bottom: the location of that peak against the output index, across 96 outputs.](outputs/figures/fcn-weights.png)</span></span>
+<span id="cb4-242"><a href="#cb4-242" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-243"><a href="#cb4-243" aria-hidden="true" tabindex="-1"></a>The peak lands on the matching pixel for **96 of 96** outputs checked, which is</span>
+<span id="cb4-244"><a href="#cb4-244" aria-hidden="true" tabindex="-1"></a>the diagonal in the lower panel. Output $i$ reads input pixel $i$.</span>
 <span id="cb4-245"><a href="#cb4-245" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-246"><a href="#cb4-246" aria-hidden="true" tabindex="-1"></a><span class="fu">## Takeaways</span></span>
-<span id="cb4-247"><a href="#cb4-247" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-248"><a href="#cb4-248" aria-hidden="true" tabindex="-1"></a>The parameter counts carry the result. A $3 \times 3$ filter is applied at all</span>
-<span id="cb4-249"><a href="#cb4-249" aria-hidden="true" tabindex="-1"></a>1,024 positions, so the CNN learns one set of weights and reuses it everywhere.</span>
-<span id="cb4-250"><a href="#cb4-250" aria-hidden="true" tabindex="-1"></a>The baseline spends 3.1M parameters learning each input-pixel to output-pixel</span>
-<span id="cb4-251"><a href="#cb4-251" aria-hidden="true" tabindex="-1"></a>relationship separately, and arrives at a worse answer. The same effect appears</span>
-<span id="cb4-252"><a href="#cb4-252" aria-hidden="true" tabindex="-1"></a>three times on this page: in the parameter counts, in the test losses, and in</span>
-<span id="cb4-253"><a href="#cb4-253" aria-hidden="true" tabindex="-1"></a>the single-pixel weight maps.</span>
-<span id="cb4-254"><a href="#cb4-254" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-255"><a href="#cb4-255" aria-hidden="true" tabindex="-1"></a>Colour is where both fall short, and a different objective is what would fix it,</span>
-<span id="cb4-256"><a href="#cb4-256" aria-hidden="true" tabindex="-1"></a>not a different architecture.</span>
+<span id="cb4-246"><a href="#cb4-246" aria-hidden="true" tabindex="-1"></a>The crops add one detail the diagonal alone does not. Around each peak sits a</span>
+<span id="cb4-247"><a href="#cb4-247" aria-hidden="true" tabindex="-1"></a>weaker band of *positive* weight over the immediate neighbours, so the baseline</span>
+<span id="cb4-248"><a href="#cb4-248" aria-hidden="true" tabindex="-1"></a>is not quite a pure per-pixel lookup: it leans slightly on the surrounding</span>
+<span id="cb4-249"><a href="#cb4-249" aria-hidden="true" tabindex="-1"></a>brightness, averaging over a small neighbourhood before choosing a colour.</span>
+<span id="cb4-250"><a href="#cb4-250" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-251"><a href="#cb4-251" aria-hidden="true" tabindex="-1"></a>That is the interesting part. Given no architectural notion of adjacency, and</span>
+<span id="cb4-252"><a href="#cb4-252" aria-hidden="true" tabindex="-1"></a>3.1M free parameters with which to learn anything at all, the model spent them</span>
+<span id="cb4-253"><a href="#cb4-253" aria-hidden="true" tabindex="-1"></a>rediscovering that neighbouring pixels are related — approximating, badly and</span>
+<span id="cb4-254"><a href="#cb4-254" aria-hidden="true" tabindex="-1"></a>expensively, what a convolution is handed for free. It also shows nothing</span>
+<span id="cb4-255"><a href="#cb4-255" aria-hidden="true" tabindex="-1"></a>resembling the edge or texture detectors a hidden layer in a deeper network</span>
+<span id="cb4-256"><a href="#cb4-256" aria-hidden="true" tabindex="-1"></a>would develop, because there is no hidden layer in which they could form.</span>
 <span id="cb4-257"><a href="#cb4-257" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-258"><a href="#cb4-258" aria-hidden="true" tabindex="-1"></a>**Next steps:**</span>
+<span id="cb4-258"><a href="#cb4-258" aria-hidden="true" tabindex="-1"></a><span class="fu">## Takeaways</span></span>
 <span id="cb4-259"><a href="#cb4-259" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-260"><a href="#cb4-260" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>an encoder-decoder with skip connections, so detail survives downsampling</span>
-<span id="cb4-261"><a href="#cb4-261" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>prediction in Lab space, colorizing only the <span class="in">`ab`</span> channels and keeping the</span>
-<span id="cb4-262"><a href="#cb4-262" aria-hidden="true" tabindex="-1"></a>  given <span class="in">`L`</span>, which removes the brightness half of the problem</span>
-<span id="cb4-263"><a href="#cb4-263" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>a perceptual or adversarial term to counteract the desaturation</span>
-<span id="cb4-264"><a href="#cb4-264" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>SSIM or LPIPS alongside MSE, since neither model should be judged only on the</span>
-<span id="cb4-265"><a href="#cb4-265" aria-hidden="true" tabindex="-1"></a>  metric it was trained to minimize</span>
+<span id="cb4-260"><a href="#cb4-260" aria-hidden="true" tabindex="-1"></a>The parameter counts carry the result. A $3 \times 3$ filter is applied at all</span>
+<span id="cb4-261"><a href="#cb4-261" aria-hidden="true" tabindex="-1"></a>1,024 positions, so the CNN learns one set of weights and reuses it everywhere.</span>
+<span id="cb4-262"><a href="#cb4-262" aria-hidden="true" tabindex="-1"></a>The baseline spends 3.1M parameters learning each input-pixel to output-pixel</span>
+<span id="cb4-263"><a href="#cb4-263" aria-hidden="true" tabindex="-1"></a>relationship separately, and arrives at a worse answer. The same effect appears</span>
+<span id="cb4-264"><a href="#cb4-264" aria-hidden="true" tabindex="-1"></a>three times on this page: in the parameter counts, in the test losses, and in</span>
+<span id="cb4-265"><a href="#cb4-265" aria-hidden="true" tabindex="-1"></a>the single-pixel weight maps.</span>
+<span id="cb4-266"><a href="#cb4-266" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-267"><a href="#cb4-267" aria-hidden="true" tabindex="-1"></a>Colour is where both fall short, and a different objective is what would fix it,</span>
+<span id="cb4-268"><a href="#cb4-268" aria-hidden="true" tabindex="-1"></a>not a different architecture.</span>
+<span id="cb4-269"><a href="#cb4-269" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-270"><a href="#cb4-270" aria-hidden="true" tabindex="-1"></a>**Next steps:**</span>
+<span id="cb4-271"><a href="#cb4-271" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-272"><a href="#cb4-272" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>an encoder-decoder with skip connections, so detail survives downsampling</span>
+<span id="cb4-273"><a href="#cb4-273" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>prediction in Lab space, colorizing only the <span class="in">`ab`</span> channels and keeping the</span>
+<span id="cb4-274"><a href="#cb4-274" aria-hidden="true" tabindex="-1"></a>  given <span class="in">`L`</span>, which removes the brightness half of the problem</span>
+<span id="cb4-275"><a href="#cb4-275" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>a perceptual or adversarial term to counteract the desaturation</span>
+<span id="cb4-276"><a href="#cb4-276" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>SSIM or LPIPS alongside MSE, since neither model should be judged only on the</span>
+<span id="cb4-277"><a href="#cb4-277" aria-hidden="true" tabindex="-1"></a>  metric it was trained to minimize</span>
 </code></pre></div><button title="Copy to Clipboard" class="code-copy-button" data-in-quarto-modal=""><i class="bi"></i></button></div>
 </div></div></div></div></div>
 </div> <!-- /content -->

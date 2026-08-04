@@ -232,10 +232,22 @@ zero, so the image is a flat field under any colormap and the single cell that
 matters is a speck. Cropping around each output's strongest weight, and tracking
 where that peak falls, shows the structure instead.
 
-The peak lands on the matching pixel every time. Output $i$ reads input pixel
-$i$, so the baseline settled into a per-pixel intensity-to-colour lookup with a
-weak negative surround, and nothing resembling the edge or texture detectors a
-hidden layer in a deeper network would show.
+![Top: 9x9 crops centred on each output's strongest weight. Bottom: the location of that peak against the output index, across 96 outputs.](outputs/figures/fcn-weights.png)
+
+The peak lands on the matching pixel for **96 of 96** outputs checked, which is
+the diagonal in the lower panel. Output $i$ reads input pixel $i$.
+
+The crops add one detail the diagonal alone does not. Around each peak sits a
+weaker band of *positive* weight over the immediate neighbours, so the baseline
+is not quite a pure per-pixel lookup: it leans slightly on the surrounding
+brightness, averaging over a small neighbourhood before choosing a colour.
+
+That is the interesting part. Given no architectural notion of adjacency, and
+3.1M free parameters with which to learn anything at all, the model spent them
+rediscovering that neighbouring pixels are related — approximating, badly and
+expensively, what a convolution is handed for free. It also shows nothing
+resembling the edge or texture detectors a hidden layer in a deeper network
+would develop, because there is no hidden layer in which they could form.
 
 ## Takeaways
 
