@@ -85,9 +85,6 @@ CIFAR-10 contains 60,000 small RGB images across 10 object categories. The label
 
 ### Why the targets are not normalized
 
-This is the single most consequential preprocessing decision in the project, so
-it is worth stating before any code runs.
-
 Both models end in a `sigmoid`, which can only emit values in $[0, 1]$. The RGB
 targets are therefore produced with `ToTensor()` alone, which already maps pixels
 into $[0, 1]$, and no `Normalize()` is applied.
@@ -291,12 +288,11 @@ right tool for a colorization system meant to look good, and out of scope here:
 they need a second network and shift the goal from reconstruction accuracy to
 plausibility.
 
-The deeper issue is that no per-pixel loss can be fully correct for this task.
-Colorization is **ill-posed** — a grey car is equally plausibly red or blue, and
-both are legitimate answers. A per-pixel loss scores the model against the one
-colour the original photograph happened to have, so it penalises plausible
-alternatives just as hard as implausible ones. That ceiling sits above every
-number reported on this page.
+No per-pixel loss can be fully correct for this task. Colorization is
+**ill-posed**: a grey car could be red or blue, and both answers are reasonable.
+A per-pixel loss scores the model against the one colour the original photograph
+happened to have, so a plausible alternative is penalised as hard as a wrong one.
+Every number on this page sits under that ceiling.
 
 ## Training Helpers
 
@@ -622,15 +618,15 @@ looked at. `fc1` is its *only* layer, so these are output weights, not
 hidden-feature detectors: row $i$ of the weight matrix holds the 1,024
 coefficients that output value $i$ applies to the grayscale input.
 
-Reshaping a row back to $32 \times 32$ answers a precise question — *which input
-pixels does this one output value read from?* Since the colour at a pixel is
-dominated by the brightness at that same pixel, the expected pattern is a bright
-spot at the corresponding location on an otherwise flat field, rather than the
-edges and textures a deeper network's hidden layer would show.
+Reshaping a row back to $32 \times 32$ shows which input pixels that one output
+value reads from. The colour at a pixel is mostly determined by the brightness at
+the same pixel, so the expected result is a bright spot at the matching location
+on a flat field, not the edges and textures a hidden layer in a deeper network
+would show.
 
-That localized response is the finding rather than a disappointment: it is direct
-evidence that the baseline learned a near per-pixel intensity-to-colour lookup,
-with none of the spatial context a convolution gets for free.
+The localized response tells us what the baseline learned: a near per-pixel
+intensity-to-colour lookup, without the spatial context a convolution has built
+into its structure.
 
 ```{python}
 #| label: fcn-weight-visualization
@@ -681,23 +677,20 @@ the {worse}, using {cnn_params / fcn_params:.1%} as many parameters as the basel
 """)
 ```
 
-The parameter ratio is the point worth sitting with. The CNN wins while carrying a
-small fraction of the baseline's weights, because a $3 \times 3$ filter is reused at
-all 1,024 pixel positions instead of being relearned for each one. The baseline
-spends 3.1M parameters rediscovering, separately for every output pixel, a
-relationship the convolution gets for free from its architecture. That is what
-"inductive bias" means in practice, and it is visible in three places on this page
-at once: the parameter counts, the test losses, and the localized blobs in the
-weight visualization.
+The parameter counts explain most of this. A $3 \times 3$ filter is applied at all
+1,024 pixel positions, so the CNN learns one set of weights and reuses it. The
+baseline has to learn the relationship between every input pixel and every output
+pixel separately, which is what its 3.1M parameters are spent on. The same effect
+shows up three times on this page: in the parameter counts, in the test losses,
+and in the localized blobs in the weight plots.
 
-What neither model does well is colour. Both outputs are muted next to the ground
-truth, and the reason is structural rather than a matter of training longer: MSE
-rewards hedging toward the average of every plausible colour, as described in the
-loss section. A model uncertain whether a car is red or blue minimizes its expected
-squared error by predicting grey-brown. Fixing that requires changing the objective,
-not the architecture.
+Colour is where both models fall short. The predictions look muted next to the
+ground truth, and training longer will not fix it. MSE rewards hedging toward the
+average of the plausible colours, so a model unsure whether a car is red or blue
+gets a lower loss by predicting grey-brown. That needs a different objective, not
+a different architecture.
 
-**Where this would go next:**
+**Next steps:**
 
 - an encoder-decoder with skip connections, so fine detail survives downsampling
 - prediction in Lab space, colorizing only the `ab` channels and keeping the given

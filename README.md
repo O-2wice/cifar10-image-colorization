@@ -4,80 +4,80 @@
 ![Runtime](https://img.shields.io/badge/runtime-CPU%20or%20GPU-blue)
 ![Framework](https://img.shields.io/badge/framework-PyTorch-orange)
 
-This project trains neural networks to reconstruct RGB CIFAR-10 images from grayscale inputs. It compares:
+Predict the colors of a grayscale image. Two PyTorch models are trained on the
+same task, loss and data: a convolutional colorizer and a fully connected
+baseline. The baseline has about 20x more parameters and still scores worse.
 
-- a shallow convolutional neural network that preserves spatial image structure
-- a fully connected baseline that maps flattened grayscale pixels directly to RGB pixels
+## Quick Start
 
-The main runnable notebook is:
-
-```text
-notebooks/original-image-colorization.ipynb
+```powershell
+pip install -r requirements.txt
 ```
 
-The Quarto report in `index.qmd` is the presentation layer for GitHub Pages.
+Open `notebooks/original-image-colorization.ipynb` and run it top to bottom.
+CPU training takes about nine minutes per epoch. For GPU, see [COLAB.md](COLAB.md),
+which covers running on a Colab runtime from the browser or from VS Code.
 
-## Project Structure
+Each epoch writes a resume checkpoint with model weights, optimizer state and
+loss history. If a session drops, re-running the training cell continues from
+the last completed epoch. The two models train in separate cells.
 
-```text
-cifar10-image-colorization/
-  index.qmd                         # Quarto project report
-  _quarto.yml                       # Quarto site configuration
-  requirements.txt                  # Python dependencies
-  COLAB.md                          # Colab workflow from VS Code
-  notebooks/
-    original-image-colorization.ipynb # Main runnable project notebook
-  scripts/
-    train_colorization.py           # Terminal training script with progress logs
-  outputs/
-    models/                         # Local trained checkpoints, ignored by git
-    metrics/                        # JSON metrics and training history
-    figures/                        # Optional exported figures
+To run it from a terminal instead:
+
+```powershell
+python scripts/train_colorization.py --epochs 10
 ```
 
-## Recommended Workflow
+## Report
 
-Use the notebook when you want to relearn the project and train on Colab GPU:
-
-```text
-notebooks/original-image-colorization.ipynb
-```
-
-Inside the notebook, run cells from top to bottom. The final Colab cell packages `outputs/` as a zip so the trained checkpoints and metrics can be copied back into this repository.
-
-The training cells are built to survive a dropped Colab session. Each epoch writes a resume checkpoint holding model weights, optimizer state and loss history, so re-running an interrupted training cell continues from the epoch it reached instead of starting over. The two models train in separate cells, so a failure on one cannot cost you the other.
-
-Once `outputs/` holds real artifacts, render the report:
+`index.qmd` is the written version of the experiment. Render it with:
 
 ```powershell
 quarto render
 ```
 
-The rendered HTML site is written to `docs/`, and the executed results are cached under `_freeze/`. Both are committed, so the published page keeps its figures even when cloned onto a machine with no GPU, no CIFAR-10 download and no checkpoints. Add `--force` when you deliberately want to re-execute.
+HTML goes to `docs/` for GitHub Pages, and executed results are cached in
+`_freeze/`. Both are committed so the page keeps its figures on a machine
+without a GPU, the dataset or checkpoints. Use `--force` to re-execute.
 
-## Methods
+## Layout
 
-The task is framed as pixel-level reconstruction:
+```text
+index.qmd                             # write-up, renders to docs/
+notebooks/
+  original-image-colorization.ipynb   # the experiment
+scripts/
+  train_colorization.py               # terminal version
+outputs/
+  models/                             # checkpoints (gitignored)
+  metrics/                            # loss history, test results
+```
 
-- input: grayscale CIFAR-10 image, shape `1 x 32 x 32`
-- target: RGB CIFAR-10 image, shape `3 x 32 x 32`
-- loss: mean squared error
+## Method
 
-The CIFAR-10 training split is divided into 45,000 training samples and 5,000 validation samples. The 10,000-image CIFAR-10 test split is held out for final evaluation.
+Pixel-level regression. Input is a `1 x 32 x 32` grayscale tensor, output is a
+`3 x 32 x 32` RGB tensor, scored with mean squared error.
 
-The CNN uses four convolutional layers with ReLU activations and a sigmoid output. The fully connected baseline uses a linear projection from `32 x 32` grayscale pixels to `3 x 32 x 32` RGB pixels.
+The CNN uses four `3 x 3` convolutions with ReLU and a sigmoid output. There is
+no pooling, so the image stays at full resolution the whole way through. The
+baseline flattens the input and applies one linear layer mapping 1,024 grayscale
+values to 3,072 RGB values.
 
-Both models end in a sigmoid, so the RGB targets are kept in `[0, 1]` with `ToTensor()` and **no** `Normalize()`. Normalizing targets to `[-1, 1]` would place half the target range outside anything a sigmoid can output and floor the achievable MSE near `0.15` regardless of architecture. The Quarto report works through this in the preprocessing section.
+The 50,000 training images are split 45,000 / 5,000. Early stopping and
+checkpoint selection use the validation split only. The 10,000 test images are
+used once, at the end.
 
-## Portfolio Notes
+## Target Scaling
 
-This repository is designed to show:
+Both models end in a sigmoid, so their outputs fall in `[0, 1]`. Targets are
+produced with `ToTensor()` and are not normalized.
 
-- PyTorch dataset construction
-- image-to-image training
-- model comparison
-- training curve interpretation
-- visual evaluation
-- feature-map and weight inspection
+The coursework version normalized targets to `[-1, 1]`. A sigmoid cannot reach
+the negative half of that range, so the error floored near `0.15` regardless of
+how long the models trained. Removing the normalization is what makes the loss
+values here meaningful. The report shows the arithmetic.
 
-Use real CIFAR-10 only. Data and heavyweight trained artifacts stay local unless intentionally added later.
+## Notes
+
+The dataset and trained weights are not committed. Everything needed to
+regenerate them is.

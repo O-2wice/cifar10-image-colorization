@@ -23,7 +23,7 @@ Local CPU training is slow for this project. Colab lets the expensive training r
 3. In the notebook toolbar, choose `Select Kernel > Colab > Auto Connect`.
 4. Sign in when prompted.
 5. Pick a GPU runtime.
-6. Run the cells from top to bottom. The setup cell prints `Runtime accelerator: GPU` and `Running in Colab: True` when the connection is live — check both before starting a long run.
+6. Run the cells from top to bottom. The setup cell prints `Runtime accelerator: GPU` and `Running in Colab: True` when the connection is live. Check both before starting a long run.
 7. Run the Drive mount cell before training. This is how results get off the runtime on this route.
 8. The training cells write best checkpoints to `outputs/models/` and metrics to `outputs/metrics/` **on the Colab machine**, not on your laptop.
 9. Run the final cell. With Drive mounted it copies `image-colorization-outputs.zip` to `MyDrive/cifar10-image-colorization/`.
@@ -38,7 +38,7 @@ quarto render
 
 Both attach to the same kind of Colab VM, but they differ in one way that matters here: the browser has a bridge that can push a file straight to your downloads folder, and the VS Code extension does not.
 
-The notebook handles both. It detects the runtime by checking whether the `google.colab` package is *installed*, rather than whether it has been imported — the browser frontend imports it at startup, while the VS Code extension attaches a plain kernel to the same machine and does not. Checking `sys.modules` would therefore report "not Colab" on a real Colab GPU and silently disable the DataLoader workers.
+The notebook handles both. It detects the runtime by checking whether the `google.colab` package is *installed*, not whether it has been imported. The browser frontend imports it at startup; the VS Code extension attaches a plain kernel to the same machine and does not. A `sys.modules` check would report "not Colab" on a real Colab GPU and silently disable the DataLoader workers.
 
 The final cell tries Drive first, then a direct browser download, and otherwise reports where the archive sits on the runtime.
 
