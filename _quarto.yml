@@ -1,11 +1,30 @@
 project:
   type: website
   output-dir: docs
+  resources:
+    - assets/social-card.png
+    - assets/favicon.png
   render:
     - index.qmd
 
 website:
   title: "CIFAR-10 Image Colorization"
+  description: >-
+    Predicting the colours of a grayscale image. A convolutional colorizer and a fully
+    connected baseline trained on the same task, loss and data, where the baseline
+    carries 21x more parameters and still scores worse.
+  # site-url is what lets Quarto emit a sitemap and absolute URLs in the social tags;
+  # without it there is no sitemap.xml and og:image cannot resolve.
+  site-url: "https://o-2wice.github.io/cifar10-image-colorization/"
+  repo-url: "https://github.com/O-2wice/cifar10-image-colorization"
+  favicon: assets/favicon.png
+  image: assets/social-card.png
+  open-graph:
+    image-width: 1200
+    image-height: 630
+    locale: en_GB
+  twitter-card:
+    card-style: summary_large_image
   navbar:
     left:
       - href: index.qmd

@@ -2,6 +2,14 @@
 title: "CIFAR-10 Image Colorization"
 subtitle: "A PyTorch comparison of convolutional and fully connected grayscale-to-RGB colorizers"
 jupyter: cifar10-image-colorization
+description: >-
+  Predicting the colours of a grayscale image on CIFAR-10. A convolutional
+  colorizer reaches 0.0053 held-out test MSE against 0.0074 for a fully connected
+  baseline carrying 21x more parameters.
+image: assets/social-card.png
+image-alt: >-
+  CIFAR-10 Image Colorization: the convolutional model reaches 0.0053 test MSE
+  against 0.0074 for a fully connected baseline with 21x more parameters.
 ---
 
 ## Overview

@@ -7,7 +7,7 @@
 
 Predict the colors of a grayscale image. Two PyTorch models are trained on the
 same task, loss and data: a convolutional colorizer and a fully connected
-baseline. The baseline has about 20x more parameters and still scores worse.
+baseline. The baseline has about 21x more parameters and still scores worse.
 
 **[Read the write-up](https://o-2wice.github.io/cifar10-image-colorization/)** for
 the method, the figures and the results.
@@ -48,6 +48,16 @@ quarto render
 HTML goes to `docs/` for GitHub Pages, and executed results are cached in
 `_freeze/`. Both are committed so the page keeps its figures on a machine
 without a GPU, the dataset or checkpoints. Use `--force` to re-execute.
+
+Re-executing needs the kernel named in `index.qmd`. Register it once from this
+repo's environment:
+
+```powershell
+python -m ipykernel install --user --name cifar10-image-colorization
+```
+
+Rendering from the cache does not need it, which is why a plain `quarto render`
+works on a fresh clone.
 
 ## Layout
 
