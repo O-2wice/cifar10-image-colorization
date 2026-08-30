@@ -19,7 +19,7 @@ grayscale image and predicts the three colour channels that were removed.
 
 Two PyTorch models are trained on the same task, the same loss and the same
 data. One is convolutional; the other flattens the image and maps pixels
-directly. The comparison is the point, because the second model has roughly 20
+directly. The comparison is the point, because the second model has roughly 21
 times more parameters and still loses.
 
 [The notebook](https://github.com/O-2wice/cifar10-image-colorization/blob/main/notebooks/original-image-colorization.ipynb)

@@ -421,7 +421,7 @@ window.Quarto = {
 <section id="overview" class="level2">
 <h2 class="anchored" data-anchor-id="overview">Overview</h2>
 <p>Colorization is a supervised image-to-image problem: the model receives a grayscale image and predicts the three colour channels that were removed.</p>
-<p>Two PyTorch models are trained on the same task, the same loss and the same data. One is convolutional; the other flattens the image and maps pixels directly. The comparison is the point, because the second model has roughly 20 times more parameters and still loses.</p>
+<p>Two PyTorch models are trained on the same task, the same loss and the same data. One is convolutional; the other flattens the image and maps pixels directly. The comparison is the point, because the second model has roughly 21 times more parameters and still loses.</p>
 <p><a href="https://github.com/O-2wice/cifar10-image-colorization/blob/main/notebooks/original-image-colorization.ipynb">The notebook</a> is the runnable artifact: it trains on a Colab GPU and writes the figures and metrics this page reads. That split keeps the page renderable on any machine, with no GPU, no dataset download and no checkpoints. All the code on this page comes from it, and every figure was produced by running it.</p>
 <p><a href="https://colab.research.google.com/github/O-2wice/cifar10-image-colorization/blob/main/notebooks/original-image-colorization.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" class="img-fluid" alt="Open the notebook in Colab"></a> &nbsp; <a href="https://github.com/O-2wice/cifar10-image-colorization">Browse the repository</a></p>
 </section>
@@ -1082,7 +1082,7 @@ window.Quarto = {
 <span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a>Two PyTorch models are trained on the same task, the same loss and the same</span>
 <span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a>data. One is convolutional; the other flattens the image and maps pixels</span>
-<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a>directly. The comparison is the point, because the second model has roughly 20</span>
+<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a>directly. The comparison is the point, because the second model has roughly 21</span>
 <span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a>times more parameters and still loses.</span>
 <span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb4-25"><a href="#cb4-25" aria-hidden="true" tabindex="-1"></a><span class="co">[</span><span class="ot">The notebook</span><span class="co">](https://github.com/O-2wice/cifar10-image-colorization/blob/main/notebooks/original-image-colorization.ipynb)</span></span>
