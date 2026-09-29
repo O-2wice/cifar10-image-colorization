@@ -100,3 +100,7 @@ values here meaningful. The report shows the arithmetic.
 
 The dataset and trained weights are not committed. Everything needed to
 regenerate them is.
+
+## License
+
+[MIT](LICENSE). The dataset and any pretrained weights keep their own licences.
