@@ -42,6 +42,8 @@ website:
 
 format:
   html:
+    # Without this Quarto appends the site title, repeating it in the tab
+    title-prefix: ""
     theme:
       light: cosmo
       dark: darkly

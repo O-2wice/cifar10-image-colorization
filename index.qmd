@@ -1,5 +1,6 @@
 ---
 title: "CIFAR-10 Image Colorization"
+pagetitle: "CIFAR-10 image colorization in PyTorch: CNN vs fully connected"
 subtitle: "A PyTorch comparison of convolutional and fully connected grayscale-to-RGB colorizers"
 jupyter: cifar10-image-colorization
 description: >-
